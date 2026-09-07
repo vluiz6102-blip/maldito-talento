@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #0A0B0E;
+    --bg-surface: #14161C;
+    --bg-card: #1A1D24;
+    --bg-footer: #0F1115;
+    --border-subtle: rgba(255, 255, 255, 0.1);
+    --border-muted: rgba(255, 255, 255, 0.05);
+  }
+
+  body {
+    background-color: #0A0B0E;
+    color: #E0E0E0;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Custom sleek scrollbar for Elegant Dark */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0A0B0E;
+}
+::-webkit-scrollbar-thumb {
+  background: #1A1D24;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+}

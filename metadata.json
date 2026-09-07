@@ -1,0 +1,6 @@
+{
+  "name": "CEO Empire",
+  "description": "Simulação executiva e tycoon narrativo onde você assume a Vantex Dynamics à beira da falência e deve negociar com credores, concorrentes e IA para construir um império trilionário.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
