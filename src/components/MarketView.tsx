@@ -17,16 +17,17 @@ import { sounds } from '../utils/audio';
 
 interface MarketViewProps {
   gameState: GameState;
-  onUpdateGameState: (nextState: GameState) => void;
+  onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }
 
-export const MarketView: React.FC<MarketViewProps> = ({
+export const MarketView: React.FC<MarketViewProps> = React.memo(({
   gameState,
   onUpdateGameState,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [marketNotice, setMarketNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const stockHistory = gameState.stockHistory;
   const marketCap = gameState.stockPrice * gameState.sharesTotal;
@@ -100,6 +101,7 @@ export const MarketView: React.FC<MarketViewProps> = ({
   };
 
   const handleBuyback = () => {
+    if (isProcessing) return;
     const cost = 50000;
     if (gameState.cash < cost) {
       sounds.playWarningBeep();
@@ -110,33 +112,38 @@ export const MarketView: React.FC<MarketViewProps> = ({
       return;
     }
 
+    setIsProcessing(true);
     sounds.playCashChime();
     sounds.playMarketBell();
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
-    nextState.cash -= cost;
-    nextState.playerSharesPercent = Math.min(100, nextState.playerSharesPercent + 2);
-    nextState.stockPrice = Number((nextState.stockPrice * 1.08).toFixed(2));
-    nextState.reputation.investors = Math.min(100, nextState.reputation.investors + 8);
+    onUpdateGameState(prev => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
+      nextState.cash -= cost;
+      nextState.playerSharesPercent = Math.min(100, nextState.playerSharesPercent + 2);
+      nextState.stockPrice = Number((nextState.stockPrice * 1.08).toFixed(2));
+      nextState.reputation.investors = Math.min(100, nextState.reputation.investors + 8);
 
-    nextState.newsFeed.unshift({
-      id: `news_buyback_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'Wall Street Dispatch',
-      title: 'Vantex Dynamics deflagra programa de recompra e eleva fatia do CEO',
-      snippet: 'Mercado comemora confiança da diretoria em seu próprio valuation.',
-      sentiment: 'bullish',
+      nextState.newsFeed.unshift({
+        id: `news_buyback_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'Wall Street Dispatch',
+        title: 'Vantex Dynamics deflagra programa de recompra e eleva fatia do CEO',
+        snippet: 'Mercado comemora confiança da diretoria em seu próprio valuation.',
+        sentiment: 'bullish',
+      });
+      return nextState;
     });
 
     setMarketNotice({
       message: 'Recompra executada! Sua fatia aumentou +2% e ações $VNTX valorizaram +8%.',
       type: 'success'
     });
-    onUpdateGameState(nextState);
+    setIsProcessing(false);
   };
 
   const handleFollowOn = () => {
+    if (isProcessing) return;
     if (gameState.playerSharesPercent <= 20) {
       sounds.playWarningBeep();
       setMarketNotice({
@@ -146,62 +153,74 @@ export const MarketView: React.FC<MarketViewProps> = ({
       return;
     }
 
+    setIsProcessing(true);
     sounds.playCashChime();
     sounds.playMarketBell();
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
-    const cashRaised = Math.round(nextState.stockPrice * 50000);
-    nextState.cash += cashRaised;
-    nextState.playerSharesPercent -= 5;
-    nextState.stockPrice = Number((nextState.stockPrice * 0.96).toFixed(2));
+    const cashRaised = Math.round(gameState.stockPrice * 50000);
 
-    nextState.newsFeed.unshift({
-      id: `news_followon_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'Wall Street Dispatch',
-      title: 'Vantex Dynamics capta capital fresco em oferta pública secundária (Follow-On)',
-      snippet: `Injeção de $${cashRaised.toLocaleString()} no caixa operacional acelera expansão ao custo de leve diluição.`,
-      sentiment: 'neutral',
+    onUpdateGameState(prev => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
+      const currentCashRaised = Math.round(nextState.stockPrice * 50000);
+      nextState.cash += currentCashRaised;
+      nextState.playerSharesPercent -= 5;
+      nextState.stockPrice = Number((nextState.stockPrice * 0.96).toFixed(2));
+
+      nextState.newsFeed.unshift({
+        id: `news_followon_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'Wall Street Dispatch',
+        title: 'Vantex Dynamics capta capital fresco em oferta pública secundária (Follow-On)',
+        snippet: `Injeção de $${currentCashRaised.toLocaleString()} no caixa operacional acelera expansão ao custo de leve diluição.`,
+        sentiment: 'neutral',
+      });
+      return nextState;
     });
 
     setMarketNotice({
       message: `Follow-On bem-sucedido! +$${cashRaised.toLocaleString()} captados com diluição de 5%.`,
       type: 'success'
     });
-    onUpdateGameState(nextState);
+    setIsProcessing(false);
   };
 
   const handlePartnerWithRival = (brandId: string) => {
+    if (isProcessing) return;
     const brand = gameState.rivals[brandId];
     if (!brand) return;
 
+    setIsProcessing(true);
     sounds.playClick();
     sounds.playCashChime();
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
-    nextState.rivals[brandId].relationshipScore = Math.min(100, (nextState.rivals[brandId].relationshipScore || 0) + 25);
-    nextState.quarterlyRevenue += 35000;
-    nextState.reputation.public = Math.min(100, nextState.reputation.public + 5);
+    onUpdateGameState(prev => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
+      nextState.rivals[brandId].relationshipScore = Math.min(100, (nextState.rivals[brandId].relationshipScore || 0) + 25);
+      nextState.quarterlyRevenue += 35000;
+      nextState.reputation.public = Math.min(100, nextState.reputation.public + 5);
 
-    nextState.newsFeed.unshift({
-      id: `news_partner_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'TechPulse News',
-      title: `ALIANÇA: Vantex Dynamics fecha memorando de entendimento com ${brand.name}`,
-      snippet: `${brand.leaderName} afirma: "Unir forças é mais lucrativo do que brigar na justiça".`,
-      sentiment: 'bullish',
+      nextState.newsFeed.unshift({
+        id: `news_partner_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'TechPulse News',
+        title: `ALIANÇA: Vantex Dynamics fecha memorando de entendimento com ${brand.name}`,
+        snippet: `${brand.leaderName} afirma: "Unir forças é mais lucrativo do que brigar na justiça".`,
+        sentiment: 'bullish',
+      });
+      return nextState;
     });
 
     setMarketNotice({
       message: `Acordo de cooperação com a ${brand.name} formalizado! +$35.000 em receita trimestral.`,
       type: 'success'
     });
-    onUpdateGameState(nextState);
+    setIsProcessing(false);
   };
 
   const handleHostileTakeover = (brandId: string) => {
+    if (isProcessing) return;
     const brand = gameState.rivals[brandId];
     if (!brand) return;
 
@@ -222,31 +241,36 @@ export const MarketView: React.FC<MarketViewProps> = ({
       return;
     }
 
+    setIsProcessing(true);
     sounds.playGavelStrike();
     sounds.playSuccessChime();
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
-    nextState.cash -= brand.hostileTakeoverCost;
-    nextState.rivals[brandId].isAcquired = true;
-    nextState.stockPrice = Number((nextState.stockPrice * 1.8).toFixed(2));
-    nextState.quarterlyRevenue += Math.round(brand.marketCap * 0.005);
-    nextState.traits.ruthless = Math.min(100, nextState.traits.ruthless + 25);
+    onUpdateGameState(prev => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
+      const tBrand = nextState.rivals[brandId];
+      nextState.cash -= tBrand.hostileTakeoverCost;
+      tBrand.isAcquired = true;
+      nextState.stockPrice = Number((nextState.stockPrice * 1.8).toFixed(2));
+      nextState.quarterlyRevenue += Math.round(tBrand.marketCap * 0.005);
+      nextState.traits.ruthless = Math.min(100, nextState.traits.ruthless + 25);
 
-    nextState.newsFeed.unshift({
-      id: `news_takeover_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'Wall Street Dispatch',
-      title: `TERREMOTO GLOBAL: Vantex Dynamics adquire controle total da ${brand.name}!`,
-      snippet: `Em manobra histórica de M&A, o CEO da Vantex comprou o controle da rival.`,
-      sentiment: 'bullish',
+      nextState.newsFeed.unshift({
+        id: `news_takeover_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'Wall Street Dispatch',
+        title: `TERREMOTO GLOBAL: Vantex Dynamics adquire controle total da ${brand.name}!`,
+        snippet: `Em manobra histórica de M&A, o CEO da Vantex comprou o controle da rival.`,
+        sentiment: 'bullish',
+      });
+      return nextState;
     });
 
     setMarketNotice({
       message: `OPA Hostil consumada com êxito! A ${brand.name} agora é uma subsidiária da Vantex Dynamics.`,
       type: 'success'
     });
-    onUpdateGameState(nextState);
+    setIsProcessing(false);
   };
 
   const rivalsList = (Object.values(gameState.rivals) as RivalBrand[]).filter(brand => {
@@ -305,12 +329,14 @@ export const MarketView: React.FC<MarketViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleBuyback}
+              disabled={isProcessing}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
             >
               Recompra de Ações ($50k)
             </button>
             <button
               onClick={handleFollowOn}
+              disabled={isProcessing}
               className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 text-xs font-bold transition"
             >
               Follow-On (Captação)
@@ -454,6 +480,7 @@ export const MarketView: React.FC<MarketViewProps> = ({
               <div className="space-y-1.5 pt-2 border-t border-slate-850">
                 <button
                   onClick={() => handlePartnerWithRival(brand.id)}
+                  disabled={isProcessing}
                   className="w-full py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-amber-300 text-xs font-semibold border border-slate-700 transition flex items-center justify-center gap-1.5"
                 >
                   <Handshake className="w-3.5 h-3.5 text-amber-400" />
@@ -463,6 +490,7 @@ export const MarketView: React.FC<MarketViewProps> = ({
                 {!isAcquired && (
                   <button
                     onClick={() => handleHostileTakeover(brand.id)}
+                    disabled={isProcessing}
                     className="w-full py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-xs font-bold border border-rose-900/60 transition flex items-center justify-center gap-1.5"
                   >
                     <Swords className="w-3.5 h-3.5 text-rose-400" />
@@ -476,4 +504,12 @@ export const MarketView: React.FC<MarketViewProps> = ({
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.gameState.stockHistory === next.gameState.stockHistory &&
+         prev.gameState.stockPrice === next.gameState.stockPrice &&
+         prev.gameState.sharesTotal === next.gameState.sharesTotal &&
+         prev.gameState.playerSharesPercent === next.gameState.playerSharesPercent &&
+         prev.gameState.reputation.investors === next.gameState.reputation.investors &&
+         prev.gameState.cash === next.gameState.cash &&
+         prev.gameState.rivals === next.gameState.rivals;
+});

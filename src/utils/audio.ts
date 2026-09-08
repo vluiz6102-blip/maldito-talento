@@ -7,7 +7,7 @@ class SoundController {
   private musicPlaying: boolean = false;
   private musicVolume: number = 0.35;
   private masterMusicGain: GainNode | null = null;
-  private musicInterval: any = null;
+  private musicInterval: ReturnType<typeof setInterval> | null = null;
   private currentChordIndex: number = 0;
   private listeners: MusicStateListener[] = [];
   private isUnlocked: boolean = false;

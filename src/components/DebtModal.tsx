@@ -8,7 +8,7 @@ interface DebtModalProps {
   isOpen: boolean;
   onClose: () => void;
   gameState: GameState;
-  onUpdateGameState: (nextState: GameState) => void;
+  onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
   onNavigateToNegotiation: () => void;
 }
 

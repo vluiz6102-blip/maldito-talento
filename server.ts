@@ -2,15 +2,60 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { launchProduct, ProductLaunchInput, CATEGORY_BASELINE } from "./productSystem";
+import { validarNumero } from "./src/utils/validation";
+import { GameState, NegotiationCharacter, NewsArticle } from "./src/types";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+// Rate limiting for AI endpoints
+const aiRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 20, // Limit each IP to 20 requests per windowMs
+  message: { error: "Muitas requisições. Por favor, aguarde 10 minutos antes de tentar novamente." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Allowed domains for CORS (dynamic fallback to generic for AI Studio, but strictly custom domain in prod)
+const allowedOrigins = process.env.ALLOWED_ORIGIN 
+  ? [process.env.ALLOWED_ORIGIN] 
+  : ['http://localhost:3000', 'https://ais-dev-vihl7zglyixhqnjmjh2t6m-349503882336.us-east1.run.app', 'https://ais-pre-vihl7zglyixhqnjmjh2t6m-349503882336.us-east1.run.app'];
+
+app.use(cors({ 
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.run.app') || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "X-App-Origin"]
+}));
+
+// Basic App-Origin verification middleware to block simple direct automated scripts
+app.use('/api', (req, res, next) => {
+  // Allow healthcheck
+  if (req.path === '/health') return next();
+  
+  const appOrigin = req.headers['x-app-origin'];
+  if (appOrigin !== 'ceo-empire-client-v1') {
+    return res.status(403).json({ error: "Acesso direto à API bloqueado. Cabeçalho de cliente ausente ou inválido." });
+  }
+  next();
+});
+
 app.use(express.json());
+
+// Log temporário para validar se a env var está sendo lida na Vercel
+console.log("[CEO Empire API] GEMINI_API_KEY configurada?", !!process.env.GEMINI_API_KEY);
 
 // Lazy-initialized Gemini AI client
 let aiClient: GoogleGenAI | null = null;
@@ -41,7 +86,7 @@ app.get("/api/health", (req: Request, res: Response) => {
 });
 
 // Dynamic AI Negotiation Endpoint
-app.post("/api/negotiate", async (req: Request, res: Response) => {
+app.post("/api/negotiate", aiRateLimiter, async (req: Request, res: Response) => {
   const {
     character,
     history,
@@ -54,8 +99,14 @@ app.post("/api/negotiate", async (req: Request, res: Response) => {
   const charTitle = character?.title || "Executivo";
   const charCompany = character?.company || "Empresa";
   const personality = character?.personality || "Exigente e desconfiado.";
-  const currentPatience = character?.patience ?? 60;
+  const currentPatience = validarNumero(character?.startingPatience, 60);
   const currentMood = character?.mood || "cautious";
+
+  const validCash = validarNumero(gameState?.cash, 100000);
+  const validDebt = validarNumero(gameState?.debt, 500000);
+  const validDebtDeadlineDays = validarNumero(gameState?.debtDeadlineDays, 90);
+  const validRepPublic = validarNumero(gameState?.reputation?.public, 50);
+  const validRepInvestors = validarNumero(gameState?.reputation?.investors, 40);
 
   const ai = getAI();
 
@@ -65,12 +116,12 @@ app.post("/api/negotiate", async (req: Request, res: Response) => {
 Sua personalidade: ${personality}
 O jogador é o novo CEO da Vantex Dynamics, empresa em crise com histórico de fraude pelo ex-CEO foragido Arthur Vance.
 Dados da empresa do jogador:
-- Caixa: $${gameState?.cash?.toLocaleString() || "100.000"}
-- Dívida ativa: $${gameState?.debt?.toLocaleString() || "500.000"}
-- Dias restantes para vencer a dívida: ${gameState?.debtDeadlineDays || 90} dias
+- Caixa: $${validCash.toLocaleString()}
+- Dívida ativa: $${validDebt.toLocaleString()}
+- Dias restantes para vencer a dívida: ${validDebtDeadlineDays} dias
 - Era atual: ${gameState?.era || "Startup Garagem"}
-- Reputação pública: ${gameState?.reputation?.public || 50}/100
-- Confiança do mercado: ${gameState?.reputation?.investors || 40}/100
+- Reputação pública: ${validRepPublic}/100
+- Confiança do mercado: ${validRepInvestors}/100
 - Paciência atual com o jogador: ${currentPatience}/100
 
 Regras da Negociação:
@@ -136,10 +187,10 @@ Gere sua resposta e a avaliação da negociação no formato JSON especificado.`
 
 // Procedural fallback logic for seamless experience
 function generateSimulatedNegotiation(
-  character: any,
+  character: NegotiationCharacter,
   playerMessage: string,
   tactic: string,
-  gameState: any
+  gameState: GameState
 ) {
   const msgLower = (playerMessage || "").toLowerCase();
   const id = character?.id || "confianca";
@@ -156,7 +207,7 @@ function generateSimulatedNegotiation(
     reputationDelta: 0,
   };
 
-  const currentPatience = character?.patience ?? 50;
+  const currentPatience = character?.startingPatience ?? 50;
 
   if (id === "confianca_barreto") {
     // Dr. Osvaldo Barreto - Confiança Federal
@@ -283,14 +334,17 @@ function generateSimulatedNegotiation(
 }
 
 // Generate dynamic satirical TechPulse News
-app.post("/api/generate-news", async (req: Request, res: Response) => {
+app.post("/api/generate-news", aiRateLimiter, async (req: Request, res: Response) => {
   const { eventType, eventDetails, gameState } = req.body;
+  
+  const validEra = gameState?.era || "Startup Garagem";
+
   const ai = getAI();
 
   if (ai) {
     try {
       const prompt = `Gere uma manchete e parágrafo satírico curto (máximo 40 palavras) para o jornal fictício "TechPulse News" ou "Wall Street Dispatch" reagindo ao evento: "${eventType}: ${eventDetails}".
-Empresa do jogador: Vantex Dynamics (CEO novo após fraude contábil). Era: ${gameState?.era}.
+Empresa do jogador: Vantex Dynamics (CEO novo após fraude contábil). Era: ${validEra}.
 Tom: ácido, bem-humorado, cínico, estilo Bloomberg / TechCrunch / Succession.
 Formato JSON:
 {
@@ -329,7 +383,7 @@ Formato JSON:
 });
 
 // Full Product Launch Engine Endpoint
-app.post("/api/launch-product", async (req: Request, res: Response) => {
+app.post("/api/launch-product", aiRateLimiter, async (req: Request, res: Response) => {
   try {
     const input: ProductLaunchInput = req.body.input;
     const competidores = req.body.competidores || [];
@@ -344,10 +398,14 @@ app.post("/api/launch-product", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "Dados inválidos de lançamento de produto." });
     }
 
+    // Validate inputs
+    input.marketingBudget = validarNumero(input.marketingBudget, 5000);
+    input.unitPrice = validarNumero(input.unitPrice, 100);
+
     const result = launchProduct(input, competidores, reputacao);
 
     // AI Satirical News Generation for this product launch
-    let generatedNews: any = null;
+    let generatedNews: NewsArticle | null = null;
     const ai = getAI();
     if (ai) {
       try {
@@ -387,6 +445,10 @@ Formato JSON:
 
     if (!generatedNews) {
       generatedNews = {
+        id: `news_launch_${Date.now()}`,
+        day: 1,
+        quarter: 1,
+        source: 'Mercado Tech',
         title: result.teveRecall
           ? `VEXAME: Vantex convoca recall urgente para ${result.name} após falha grave`
           : result.reviewScore >= 85
@@ -404,9 +466,9 @@ Formato JSON:
       result,
       generatedNews,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error launching product in server:", err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
@@ -431,4 +493,9 @@ async function startServer() {
   });
 }
 
-startServer();
+// Em ambiente de produção na Vercel, o VERCEL="1" é injetado automaticamente
+if (process.env.VERCEL !== "1") {
+  startServer();
+}
+
+export default app;

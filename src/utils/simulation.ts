@@ -1,5 +1,6 @@
 import { GameState, GameEra, CrisisEvent, NewsArticle } from '../types';
 import { GAME_CRISES } from '../data/crises';
+import { RANDOM_MARKET_EVENTS } from '../data/marketEvents';
 import { HR_EVENTS_POOL } from '../data/talents';
 import { RIVAL_PERIODIC_NEWS, generateDynamicNewsArticle } from '../data/news';
 import { sounds } from './audio';
@@ -104,10 +105,78 @@ export function advanceSimulationDays(prevState: GameState, daysToAdvance: numbe
     const pctChange = investorFactor + customerFactor + noise;
     next.stockPrice = Math.max(0.20, Number((next.stockPrice * (1 + pctChange)).toFixed(2)));
 
+    // Monthly Random Market Event (every 30 days)
+    if (next.day % 30 === 0 && !next.isGameOver && next.activeCrises.length === 0) {
+      const eventChance = Math.random();
+      // Calculate total probability space or just pick one if chance hits
+      let cumulative = 0;
+      let selectedEvent = null;
+      for (const ev of RANDOM_MARKET_EVENTS) {
+        cumulative += ev.baseProbability;
+        if (eventChance <= cumulative) {
+          selectedEvent = ev;
+          break;
+        }
+      }
+
+      if (selectedEvent) {
+        const newEvent = {
+          ...selectedEvent,
+          id: `market_event_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          era: next.era,
+        };
+        next.activeCrises.push(newEvent);
+        eventsTriggered.push(`📊 EVENTO DE MERCADO: "${newEvent.title}". Decisão executiva pendente na aba de Crises.`);
+        sounds.playWarningBeep();
+      }
+    }
+
     // Quarter tick every 90 days
     if (next.day % 90 === 0) {
       quarterEnded = true;
       next.quarter += 1;
+
+      // Calculate Board Confidence update before resetting quarter metrics
+      const netQuarterProfit = next.quarterlyRevenue - next.quarterlyExpenses;
+      const { atualizarConfiancaConselho, BOARD_NO_CONFIDENCE_EVENT } = require('./boardSystem');
+      
+      const repMedia = (next.reputation.public + next.reputation.investors + next.reputation.employees + next.reputation.esg) / 4;
+      
+      // Check for unethical actions recorded this quarter (proxy check)
+      const acoesAntiEticas = next.resolvedCrisisHistory
+        .filter(r => r.day > next.day - 90 && ['vance_blackmail_winsoft', 'vance_destroy_drive', 'market_hack_hide', 'market_strike_fight'].includes(r.choiceId))
+        .length;
+
+      next.conselho = atualizarConfiancaConselho(next.conselho, {
+        lucro: netQuarterProfit,
+        produtosLancados: 0, // Simplified for now
+        reputacaoMedia: repMedia,
+        acoesAntiEticas
+      });
+
+      // Board No Confidence Vote Trigger Check
+      if (next.conselho.trimestresConsecutivosCriticos >= 2 && next.conselho.ultimaVotacao !== `Q${next.quarter-1}`) {
+        // Did they already survive a vote recently? If they survived but failed AGAIN, game over.
+        const hasSurvivedVote = next.resolvedCrisisHistory.some(r => r.choiceId.startsWith('board_vote_'));
+        
+        if (hasSurvivedVote && next.conselho.trimestresConsecutivosCriticos >= 3) {
+          next.isGameOver = true;
+          next.ending = 'fired_by_board';
+          eventsTriggered.push('❌ DESTITUÍDO! O Conselho de Administração perdeu completamente a paciência e votou pela sua remoção imediata.');
+          sounds.playWarningBeep();
+        } else {
+          // Trigger the crisis
+          const voteCrisis = {
+            ...BOARD_NO_CONFIDENCE_EVENT,
+            id: `board_vote_${next.day}`,
+            era: next.era
+          };
+          next.activeCrises.push(voteCrisis);
+          next.conselho.ultimaVotacao = `Q${next.quarter-1}`;
+          eventsTriggered.push(`⚠️ ALERTA VERMELHO: A Confiança do Conselho caiu para ${next.conselho.confianca}%. Voto de desconfiança instaurado!`);
+          sounds.playWarningBeep();
+        }
+      }
 
       // Interest on remaining bank debt (3.5% per quarter, reduced by 50% if Viktor Sterling is hired)
       if (next.debt > 0) {
@@ -120,7 +189,6 @@ export function advanceSimulationDays(prevState: GameState, daysToAdvance: numbe
       }
 
       // Record quarter history
-      const netQuarterProfit = next.quarterlyRevenue - next.quarterlyExpenses;
       next.quarterHistory.push({
         quarter: next.quarter - 1,
         revenue: Math.round(next.quarterlyRevenue),

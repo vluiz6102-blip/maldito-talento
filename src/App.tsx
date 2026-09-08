@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GameState } from './types';
 import { createInitialGameState } from './data/initialState';
 import { Header } from './components/Header';
@@ -26,6 +26,8 @@ import { Building2, AlertTriangle, ArrowRight, ShieldAlert, Sparkles, CheckCircl
 
 const LOCAL_STORAGE_KEY = 'ceo_empire_game_state_v1';
 
+import { clampGameState } from './utils/validation';
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>(() => {
     const initial = createInitialGameState();
@@ -33,7 +35,7 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
+        const merged = {
           ...initial,
           ...parsed,
           reputation: { ...initial.reputation, ...(parsed.reputation || {}) },
@@ -44,6 +46,7 @@ export default function App() {
           activeHrEvents: parsed.activeHrEvents || initial.activeHrEvents,
           newsFeed: parsed.newsFeed?.length ? parsed.newsFeed : initial.newsFeed,
         };
+        return clampGameState(merged);
       }
     } catch {
       // ignore
@@ -63,27 +66,27 @@ export default function App() {
   // Persist game state
   useEffect(() => {
     try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(gameState));
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clampGameState(gameState)));
     } catch {
       // ignore
     }
   }, [gameState]);
 
   // Advance simulation days
-  const handleAdvanceDays = (days: number) => {
+  const handleAdvanceDays = useCallback((days: number) => {
     setIsSimulating(true);
 
     setTimeout(() => {
-      const result = advanceSimulationDays(gameState, days);
-      setGameState(result.nextState);
-
-      if (result.eventsTriggered.length > 0) {
-        setEventToasts(result.eventsTriggered);
-      }
-
+      setGameState(prev => {
+        const result = advanceSimulationDays(prev, days);
+        if (result.eventsTriggered.length > 0) {
+          setTimeout(() => setEventToasts(result.eventsTriggered), 0);
+        }
+        return result.nextState;
+      });
       setIsSimulating(false);
     }, 150);
-  };
+  }, []);
 
   // HR & Talent Handlers
   const handleHireStaff = (candidate: Omit<RegularStaff, 'id' | 'hiredDay'>) => {
@@ -166,19 +169,26 @@ export default function App() {
   const handleStartTraining = (program: TrainingProgram, targetSpecialty: TalentSpecialty | 'all') => {
     if (gameState.cash < program.cost || gameState.activeTraining) return;
 
-    setGameState((prev) => ({
-      ...prev,
-      cash: prev.cash - program.cost,
-      activeTraining: {
-        programId: program.id,
-        programName: program.name,
-        targetSpecialty,
-        totalDays: program.durationDays,
-        daysRemaining: program.durationDays,
-        skillGain: program.skillGain,
-        moraleGain: program.moraleGain,
-      },
-    }));
+    setGameState((prev) => {
+      const staffIds = prev.staffMembers
+        .filter((s) => targetSpecialty === 'all' || s.specialty === targetSpecialty)
+        .map((s) => s.id);
+
+      return {
+        ...prev,
+        cash: prev.cash - program.cost,
+        activeTraining: {
+          programId: program.id,
+          programName: program.name,
+          targetSpecialty,
+          staffIds,
+          totalDays: program.durationDays,
+          daysRemaining: program.durationDays,
+          skillGain: program.skillGain,
+          moraleGain: program.moraleGain,
+        },
+      };
+    });
 
     setEventToasts([`Programa de treinamento '${program.name}' iniciado para a equipe corporativa.`]);
   };

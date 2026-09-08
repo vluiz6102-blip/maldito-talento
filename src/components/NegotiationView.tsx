@@ -23,10 +23,10 @@ import { sounds } from '../utils/audio';
 
 interface NegotiationViewProps {
   gameState: GameState;
-  onUpdateGameState: (nextState: GameState) => void;
+  onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }
 
-export const NegotiationView: React.FC<NegotiationViewProps> = ({
+export const NegotiationView: React.FC<NegotiationViewProps> = React.memo(({
   gameState,
   onUpdateGameState,
 }) => {
@@ -110,7 +110,7 @@ export const NegotiationView: React.FC<NegotiationViewProps> = ({
     try {
       const response = await fetch('/api/negotiate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Origin': 'ceo-empire-client-v1' },
         body: JSON.stringify({
           character: activeChar,
           history: updatedHistory,
@@ -194,39 +194,47 @@ export const NegotiationView: React.FC<NegotiationViewProps> = ({
       type: 'success',
     });
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
+    onUpdateGameState(prev => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
 
-    // Apply financial effects
-    nextState.cash += proposal.cashEffect;
-    if (proposal.debtEffect !== 0) {
-      nextState.debt = Math.max(0, nextState.debt + proposal.debtEffect);
-    }
-    if (proposal.debtDaysExtension > 0) {
-      nextState.debtDeadlineDays += proposal.debtDaysExtension;
-    }
-    if (proposal.equityEffect !== 0) {
-      nextState.playerSharesPercent = Math.max(10, nextState.playerSharesPercent + proposal.equityEffect);
-    }
-    if (proposal.revenueBoost > 0) {
-      nextState.quarterlyRevenue += proposal.revenueBoost;
-    }
-    if (proposal.reputationEffect !== 0) {
-      nextState.reputation.investors = Math.min(100, Math.max(0, nextState.reputation.investors + proposal.reputationEffect));
-      nextState.reputation.public = Math.min(100, Math.max(0, nextState.reputation.public + Math.round(proposal.reputationEffect / 2)));
-    }
+      // Apply financial effects
+      nextState.cash += proposal.cashEffect;
+      if (nextState.cash < 0) {
+        nextState.debt += Math.abs(nextState.cash);
+        nextState.cash = 0;
+      }
 
-    // Add News Article
-    nextState.newsFeed.unshift({
-      id: `news_deal_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'TechPulse News',
-      title: `CONTRATO FECHADO: Vantex Dynamics assina ${proposal.title}`,
-      snippet: `Acordo formalizado com ${activeChar.company} traz alívio financeiro e novo horizonte estratégico para a companhia.`,
-      sentiment: 'bullish',
+      if (proposal.debtEffect !== 0) {
+        nextState.debt = Math.max(0, nextState.debt + proposal.debtEffect);
+      }
+      if (proposal.debtDaysExtension > 0) {
+        nextState.debtDeadlineDays += proposal.debtDaysExtension;
+      }
+      if (proposal.equityEffect !== 0) {
+        nextState.playerSharesPercent = Math.max(10, nextState.playerSharesPercent + proposal.equityEffect);
+      }
+      if (proposal.revenueBoost > 0) {
+        nextState.quarterlyRevenue += proposal.revenueBoost;
+      }
+      if (proposal.reputationEffect !== 0) {
+        nextState.reputation.investors = Math.min(100, Math.max(0, nextState.reputation.investors + proposal.reputationEffect));
+        nextState.reputation.public = Math.min(100, Math.max(0, nextState.reputation.public + Math.round(proposal.reputationEffect / 2)));
+      }
+
+      // Add News Article
+      nextState.newsFeed.unshift({
+        id: `news_deal_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'TechPulse News',
+        title: `CONTRATO FECHADO: Vantex Dynamics assina ${proposal.title}`,
+        snippet: `Acordo formalizado com ${activeChar.company} traz alívio financeiro e novo horizonte estratégico para a companhia.`,
+        sentiment: 'bullish',
+      });
+
+      return nextState;
     });
 
-    onUpdateGameState(nextState);
     setSignedDeals(prev => new Set(prev).add(proposal.id));
 
     // Append system message in chat
@@ -608,4 +616,12 @@ export const NegotiationView: React.FC<NegotiationViewProps> = ({
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.gameState.cash === next.gameState.cash &&
+         prev.gameState.debt === next.gameState.debt &&
+         prev.gameState.debtDeadlineDays === next.gameState.debtDeadlineDays &&
+         prev.gameState.era === next.gameState.era &&
+         prev.gameState.stockPrice === next.gameState.stockPrice &&
+         prev.gameState.reputation === next.gameState.reputation &&
+         prev.gameState.ceoName === next.gameState.ceoName;
+});

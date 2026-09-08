@@ -141,6 +141,20 @@ export const Header: React.FC<HeaderProps> = ({
             </p>
           </div>
 
+          {/* Board Confidence */}
+          <div className="text-left sm:text-center hidden md:block" title={`Confiança do Conselho de Administração: ${gameState.conselho?.confianca ?? 60}%`}>
+            <p className="text-[10px] text-white/40 uppercase font-mono tracking-widest leading-none mb-1">
+              Conselho
+            </p>
+            <p className={`text-sm font-mono font-bold ${
+              (gameState.conselho?.confianca ?? 60) >= 70 ? 'text-green-400' : 
+              (gameState.conselho?.confianca ?? 60) <= 35 ? 'text-red-400 animate-pulse' : 
+              'text-orange-400'
+            }`}>
+              {gameState.conselho?.confianca ?? 60}%
+            </p>
+          </div>
+
           {/* Ação $VNTX */}
           <div className="text-left sm:text-center hidden md:block">
             <p className="text-[10px] text-white/40 uppercase font-mono tracking-widest leading-none mb-1">

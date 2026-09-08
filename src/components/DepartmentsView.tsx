@@ -18,7 +18,7 @@ import { sounds } from '../utils/audio';
 
 interface DepartmentsViewProps {
   gameState: GameState;
-  onUpdateGameState: (nextState: GameState) => void;
+  onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }
 
 export const DepartmentsView: React.FC<DepartmentsViewProps> = ({

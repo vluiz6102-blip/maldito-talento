@@ -6,6 +6,7 @@ export interface CompanyReputation {
   public: number;      // 0 - 100
   investors: number;   // 0 - 100
   employees: number;   // 0 - 100
+  customers: number;   // 0 - 100
   esg: number;         // 0 - 100
 }
 
@@ -191,7 +192,21 @@ export interface CrisisEvent {
   choices: CrisisChoice[];
 }
 
-export type GameEnding = 'ethical_visionary' | 'wall_street_shark' | 'phoenix_turnaround' | 'liquidation_collapse';
+export interface MembroConselho {
+  nome: string;
+  cargo: string;
+  prioridade: 'lucro' | 'reputacao' | 'inovacao' | 'etica';
+  satisfacaoIndividual: number; // 0 - 100
+}
+
+export interface ConselhoState {
+  confianca: number; // 0 - 100
+  trimestresConsecutivosCriticos: number;
+  membros: MembroConselho[];
+  ultimaVotacao: string | null;
+}
+
+export type GameEnding = 'ethical_visionary' | 'wall_street_shark' | 'phoenix_turnaround' | 'liquidation_collapse' | 'fired_by_board';
 
 export interface NewsArticle {
   id: string;
@@ -231,6 +246,7 @@ export interface GameState {
   quarterlyExpenses: number;
   reputation: CompanyReputation;
   traits: CeoTraits;
+  conselho: ConselhoState;
   scandalHeat: number;      // 0 - 100
   departments: Departments;
   rivals: Record<string, RivalBrand>;
@@ -243,6 +259,7 @@ export interface GameState {
     programName: string;
     staffIds: string[];
     daysRemaining: number;
+    totalDays: number;
     targetSpecialty?: TalentSpecialty | 'all';
     skillGain?: number;
     moraleGain?: number;

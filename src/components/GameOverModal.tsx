@@ -49,6 +49,15 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           tagline: 'Do Colapso Iminente ao Triunfo Absoluto',
           story: `Nos últimos dias antes da execução judicial da falência, você conseguiu uma virada lendária. Renegociou prazos impossíveis, salvou a Vantex Dynamics no fio da navalha e reconstruiu uma máquina de gerar caixa. Harvard escreverá estudos de caso sobre o seu mandato.`,
         };
+      case 'fired_by_board':
+        return {
+          title: 'COLAPSO: DESTITUÍDO PELO CONSELHO',
+          icon: Building2,
+          iconColor: 'text-rose-500',
+          badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+          tagline: 'A Paciência dos Acionistas Esgotou',
+          story: `Seus resultados pífios, crises de reputação e falta de inovação esgotaram a paciência dos acionistas e do conselho diretor. Você foi removido do cargo de CEO por justa causa administrativa. Uma nova liderança assumiu para tentar salvar o que restou, enquanto você saiu pela porta dos fundos.`,
+        };
       case 'liquidation_collapse':
       default:
         return {

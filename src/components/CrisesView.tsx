@@ -15,10 +15,10 @@ import { sounds } from '../utils/audio';
 
 interface CrisesViewProps {
   gameState: GameState;
-  onUpdateGameState: (nextState: GameState) => void;
+  onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }
 
-export const CrisesView: React.FC<CrisesViewProps> = ({
+export const CrisesView: React.FC<CrisesViewProps> = React.memo(({
   gameState,
   onUpdateGameState,
 }) => {
@@ -28,10 +28,13 @@ export const CrisesView: React.FC<CrisesViewProps> = ({
   const [resolvedNotice, setResolvedNotice] = useState<string | null>(null);
   const [warningNotice, setWarningNotice] = useState<string | null>(null);
 
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const activeCrises = gameState.activeCrises;
   const currentCrisis = activeCrises.find(c => c.id === selectedCrisisId) || activeCrises[0];
 
   const handleSelectChoice = (crisis: CrisisEvent, choice: CrisisChoice) => {
+    if (isProcessing) return;
     // Check requirements
     if (choice.requirements?.minCash && gameState.cash < choice.requirements.minCash) {
       sounds.playWarningBeep();
@@ -39,64 +42,74 @@ export const CrisesView: React.FC<CrisesViewProps> = ({
       return;
     }
     setWarningNotice(null);
+    setIsProcessing(true);
 
     sounds.playGavelStrike();
     sounds.playCashChime();
 
-    const nextState: GameState = JSON.parse(JSON.stringify(gameState));
+    onUpdateGameState((prev: GameState) => {
+      const nextState: GameState = JSON.parse(JSON.stringify(prev));
 
-    // Remove from active crises
-    nextState.activeCrises = nextState.activeCrises.filter(c => c.id !== crisis.id);
+      // Remove from active crises
+      nextState.activeCrises = nextState.activeCrises.filter(c => c.id !== crisis.id);
 
-    // Record in history
-    nextState.resolvedCrisisHistory.push({
-      crisisId: crisis.id,
-      choiceId: choice.id,
-      day: nextState.day,
+      // Record in history
+      nextState.resolvedCrisisHistory.push({
+        crisisId: crisis.id,
+        choiceId: choice.id,
+        day: nextState.day,
+      });
+
+      // Apply financial & stats outcomes
+      const outcomes = choice.outcomes;
+      nextState.cash += outcomes.cashDelta;
+      if (nextState.cash < 0) {
+        nextState.debt += Math.abs(nextState.cash);
+        nextState.cash = 0;
+      }
+      
+      if (outcomes.debtDelta !== 0) {
+        nextState.debt = Math.max(0, nextState.debt + outcomes.debtDelta);
+      }
+      if (outcomes.debtDaysDelta !== 0) {
+        nextState.debtDeadlineDays += outcomes.debtDaysDelta;
+      }
+      if (outcomes.stockPriceDelta !== 0) {
+        nextState.stockPrice = Math.max(0.20, Number((nextState.stockPrice + outcomes.stockPriceDelta).toFixed(2)));
+      }
+
+      // Apply reputation deltas
+      if (outcomes.reputationDeltas) {
+        if (outcomes.reputationDeltas.public) nextState.reputation.public = Math.max(0, Math.min(100, nextState.reputation.public + outcomes.reputationDeltas.public));
+        if (outcomes.reputationDeltas.investors) nextState.reputation.investors = Math.max(0, Math.min(100, nextState.reputation.investors + outcomes.reputationDeltas.investors));
+        if (outcomes.reputationDeltas.employees) nextState.reputation.employees = Math.max(0, Math.min(100, nextState.reputation.employees + outcomes.reputationDeltas.employees));
+        if (outcomes.reputationDeltas.esg) nextState.reputation.esg = Math.max(0, Math.min(100, nextState.reputation.esg + outcomes.reputationDeltas.esg));
+      }
+
+      // Apply trait deltas
+      if (outcomes.traitDeltas) {
+        if (outcomes.traitDeltas.ethical) nextState.traits.ethical = Math.max(0, Math.min(100, nextState.traits.ethical + outcomes.traitDeltas.ethical));
+        if (outcomes.traitDeltas.ruthless) nextState.traits.ruthless = Math.max(0, Math.min(100, nextState.traits.ruthless + outcomes.traitDeltas.ruthless));
+        if (outcomes.traitDeltas.bold) nextState.traits.bold = Math.max(0, Math.min(100, nextState.traits.bold + outcomes.traitDeltas.bold));
+        if (outcomes.traitDeltas.secretive) nextState.traits.secretive = Math.max(0, Math.min(100, nextState.traits.secretive + outcomes.traitDeltas.secretive));
+      }
+
+      // Add News Article
+      nextState.newsFeed.unshift({
+        id: `news_crisis_${Date.now()}`,
+        day: nextState.day,
+        quarter: nextState.quarter,
+        source: 'TechPulse News',
+        title: outcomes.headline,
+        snippet: outcomes.narrativeResolution,
+        sentiment: outcomes.stockPriceDelta >= 0 ? 'bullish' : 'bearish',
+      });
+
+      return nextState;
     });
 
-    // Apply financial & stats outcomes
-    const outcomes = choice.outcomes;
-    nextState.cash += outcomes.cashDelta;
-    if (outcomes.debtDelta !== 0) {
-      nextState.debt = Math.max(0, nextState.debt + outcomes.debtDelta);
-    }
-    if (outcomes.debtDaysDelta !== 0) {
-      nextState.debtDeadlineDays += outcomes.debtDaysDelta;
-    }
-    if (outcomes.stockPriceDelta !== 0) {
-      nextState.stockPrice = Math.max(0.20, Number((nextState.stockPrice + outcomes.stockPriceDelta).toFixed(2)));
-    }
-
-    // Apply reputation deltas
-    if (outcomes.reputationDeltas) {
-      if (outcomes.reputationDeltas.public) nextState.reputation.public = Math.max(0, Math.min(100, nextState.reputation.public + outcomes.reputationDeltas.public));
-      if (outcomes.reputationDeltas.investors) nextState.reputation.investors = Math.max(0, Math.min(100, nextState.reputation.investors + outcomes.reputationDeltas.investors));
-      if (outcomes.reputationDeltas.employees) nextState.reputation.employees = Math.max(0, Math.min(100, nextState.reputation.employees + outcomes.reputationDeltas.employees));
-      if (outcomes.reputationDeltas.esg) nextState.reputation.esg = Math.max(0, Math.min(100, nextState.reputation.esg + outcomes.reputationDeltas.esg));
-    }
-
-    // Apply trait deltas
-    if (outcomes.traitDeltas) {
-      if (outcomes.traitDeltas.ethical) nextState.traits.ethical = Math.max(0, Math.min(100, nextState.traits.ethical + outcomes.traitDeltas.ethical));
-      if (outcomes.traitDeltas.ruthless) nextState.traits.ruthless = Math.max(0, Math.min(100, nextState.traits.ruthless + outcomes.traitDeltas.ruthless));
-      if (outcomes.traitDeltas.bold) nextState.traits.bold = Math.max(0, Math.min(100, nextState.traits.bold + outcomes.traitDeltas.bold));
-      if (outcomes.traitDeltas.secretive) nextState.traits.secretive = Math.max(0, Math.min(100, nextState.traits.secretive + outcomes.traitDeltas.secretive));
-    }
-
-    // Add News Article
-    nextState.newsFeed.unshift({
-      id: `news_crisis_${Date.now()}`,
-      day: nextState.day,
-      quarter: nextState.quarter,
-      source: 'TechPulse News',
-      title: outcomes.headline,
-      snippet: outcomes.narrativeResolution,
-      sentiment: outcomes.stockPriceDelta >= 0 ? 'bullish' : 'bearish',
-    });
-
-    setResolvedNotice(outcomes.narrativeResolution);
-    onUpdateGameState(nextState);
+    setResolvedNotice(currentCrisis.choices.find(c => c.id === choice.id)?.outcomes.narrativeResolution || null);
+    setIsProcessing(false);
   };
 
   return (
@@ -268,10 +281,10 @@ export const CrisesView: React.FC<CrisesViewProps> = ({
 
                             <button
                               onClick={() => handleSelectChoice(crisis, choice)}
-                              disabled={!canAfford}
+                              disabled={!canAfford || isProcessing}
                               className="w-full py-2.5 rounded bg-orange-600 hover:bg-orange-500 active:scale-[0.98] disabled:opacity-30 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-orange-950/40"
                             >
-                              {canAfford ? 'Ratificar Escolha no Conselho' : 'Fundos Insuficientes'}
+                              {!canAfford ? 'Fundos Insuficientes' : isProcessing ? 'Processando...' : 'Ratificar Escolha no Conselho'}
                             </button>
                           </div>
                         </div>
@@ -307,4 +320,8 @@ export const CrisesView: React.FC<CrisesViewProps> = ({
       )}
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.gameState.activeCrises === next.gameState.activeCrises &&
+         prev.gameState.resolvedCrisisHistory === next.gameState.resolvedCrisisHistory &&
+         prev.gameState.cash === next.gameState.cash;
+});

@@ -1,3 +1,4 @@
+import { TabType } from "./Navigation";
 import React, { useState, useMemo } from 'react';
 import {
   Rocket,
@@ -20,8 +21,8 @@ import {
   ShieldAlert,
   ChevronRight,
   Info
-} from 'lucide-react';
-import { GameState } from '../types';
+, LucideIcon } from 'lucide-react';
+import { GameState, NewsArticle } from '../types';
 import {
   ProductCategory,
   TargetSegment,
@@ -37,7 +38,7 @@ import { sounds } from '../utils/audio';
 interface ProductLaunchViewProps {
   gameState: GameState;
   onUpdateGameState: React.Dispatch<React.SetStateAction<GameState>>;
-  onNavigateTab?: (tab: any) => void;
+  onNavigateTab?: (tab: TabType) => void;
 }
 
 const RANDOM_NAMES: Record<ProductCategory, string[]> = {
@@ -48,7 +49,7 @@ const RANDOM_NAMES: Record<ProductCategory, string[]> = {
   smartwatch: ['Vantex Pulse Elite', 'ChronoSync Ultra', 'AetherBand Bio', 'Apex ChronoFit', 'Vantex Horizon Watch'],
 };
 
-export const ProductLaunchView: React.FC<ProductLaunchViewProps> = ({
+export const ProductLaunchView: React.FC<ProductLaunchViewProps> = React.memo(({
   gameState,
   onUpdateGameState,
   onNavigateTab,
@@ -77,7 +78,7 @@ export const ProductLaunchView: React.FC<ProductLaunchViewProps> = ({
   const [isLaunching, setIsLaunching] = useState(false);
   const [lastLaunchResult, setLastLaunchResult] = useState<{
     result: ProductLaunchResult;
-    news: any;
+    news: NewsArticle | null;
   } | null>(null);
 
   // Quando trocar de categoria, sincronizar presets recomendados
@@ -157,7 +158,7 @@ export const ProductLaunchView: React.FC<ProductLaunchViewProps> = ({
     try {
       const response = await fetch('/api/launch-product', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Origin': 'ceo-empire-client-v1' },
         body: JSON.stringify({
           input,
           competidores,
@@ -249,7 +250,7 @@ export const ProductLaunchView: React.FC<ProductLaunchViewProps> = ({
     }
   };
 
-  const categoriesList: { id: ProductCategory; label: string; icon: any }[] = [
+  const categoriesList: { id: ProductCategory; label: string; icon: LucideIcon }[] = [
     { id: 'chip', label: 'Chips & IA', icon: Cpu },
     { id: 'smartphone', label: 'Smartphones', icon: Smartphone },
     { id: 'console', label: 'Consoles', icon: Gamepad2 },
@@ -908,4 +909,9 @@ export const ProductLaunchView: React.FC<ProductLaunchViewProps> = ({
       )}
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.gameState.cash === next.gameState.cash &&
+         prev.gameState.reputation.public === next.gameState.reputation.public &&
+         prev.gameState.launchedProducts === next.gameState.launchedProducts &&
+         prev.gameState.rivals === next.gameState.rivals;
+});

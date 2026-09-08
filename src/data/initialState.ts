@@ -31,6 +31,7 @@ export function createInitialGameState(ceoName = 'Alex Mercer'): GameState {
       public: 48,      // Customer Trust (neutral start)
       investors: 35,   // Investor Relations (low due to Vance debt)
       employees: 52,   // Employee Morale (neutral)
+      customers: 50,   // Customer satisfaction
       esg: 45,         // Corporate Governance
     },
     traits: {
@@ -38,6 +39,17 @@ export function createInitialGameState(ceoName = 'Alex Mercer'): GameState {
       ruthless: 50,
       bold: 50,
       secretive: 50,
+    },
+    conselho: {
+      confianca: 60,
+      trimestresConsecutivosCriticos: 0,
+      ultimaVotacao: null,
+      membros: [
+        { nome: 'Elias Barreto', cargo: 'Presidente do Conselho', prioridade: 'lucro', satisfacaoIndividual: 60 },
+        { nome: 'Olivia Stone', cargo: 'Rep. Acionistas Minoritários', prioridade: 'reputacao', satisfacaoIndividual: 60 },
+        { nome: 'Dr. Akira Lins', cargo: 'Conselheiro Independente (Tech)', prioridade: 'inovacao', satisfacaoIndividual: 60 },
+        { nome: 'Helena Vance', cargo: 'Herdeira / Conselheira', prioridade: 'etica', satisfacaoIndividual: 60 },
+      ]
     },
     scandalHeat: 45,
     departments: {
