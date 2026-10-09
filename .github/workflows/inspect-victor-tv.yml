@@ -36,6 +36,18 @@ jobs:
           grep -RniE 'app_name|appname|telegram|t\.me|convite|invite' /tmp/decoded/res/values* 2>/dev/null | head -160 > inspection/resource-matches.txt || true
           grep -E 'android:name=|android:label=|android:exported=' /tmp/decoded/AndroidManifest.xml | head -100 > inspection/manifest-activities.txt || true
           cp /tmp/decoded/AndroidManifest.xml inspection/AndroidManifest-decoded.xml
+          for f in \
+            /tmp/jadx-src/sources/com/andyhax/MainActivity.java \
+            /tmp/jadx-src/sources/com/andyhax/veeepeeen/ui/login/LoginActivity.java \
+            /tmp/jadx-src/sources/com/flextv/livestore/apps/LTVApp.java \
+            /tmp/jadx-src/sources/com/flextv/livestore/MainActivity.java \
+            /tmp/jadx-src/sources/com/flextv/livestore/Constants.java
+          do
+            if [ -f "$f" ]; then
+              out="inspection/$(printf '%s' "${f#/tmp/jadx-src/sources/}" | tr '/' '_')"
+              sed -E 's#https?://[^"[:space:]]+#<URL_REDACTED>#g' "$f" > "$out"
+            fi
+          done
           {
             echo "APK SHA256:"
             cat inspection/sha256.txt
