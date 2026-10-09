@@ -30,7 +30,16 @@ jobs:
           sha256sum "Victor TV.apk" > inspection/sha256.txt
           java -jar /tmp/apktool.jar d -f "Victor TV.apk" -o /tmp/decoded > /tmp/apktool.log 2>&1
           /tmp/jadx/bin/jadx --no-res -d /tmp/jadx-src "Victor TV.apk" > /tmp/jadx.log 2>&1 || true
-          grep -RniE 't\.me|telegram|convite|invite' /tmp/jadx-src/sources /tmp/decoded/res 2>/dev/null | head -200 > inspection/telegram-matches.txt || true
+          mkdir -p /tmp/apk-extract
+          unzip -q "Victor TV.apk" 'lib/*' 'assets/*' -d /tmp/apk-extract || true
+          grep -RniE 'telegram|t[.]me[/?:]|joinchat|(^|[^[:alpha:]])invite([^[:alpha:]]|$)|convite|grupo.{0,40}(canal|tele)|canal.{0,40}(grupo|tele)' /tmp/jadx-src/sources /tmp/jadx-src/resources /tmp/decoded/res /tmp/apk-extract/assets 2>/dev/null | head -220 > inspection/telegram-matches.txt || true
+          : > inspection/native-library-matches.txt
+          find /tmp/apk-extract/lib -type f -name '*.so' -print 2>/dev/null | sort > inspection/native-libraries.txt || true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            echo "=== $(basename "$f") ===" >> inspection/native-library-matches.txt
+            strings -a -n 5 "$f" | grep -Ei 'telegram|t[.]me[/?:]|joinchat|invite|convite|whatsapp' | head -80 >> inspection/native-library-matches.txt || true
+          done < inspection/native-libraries.txt
           grep -RliE 'ACTION_VIEW|android\.intent\.action\.VIEW|Uri\.parse|startActivity\(' /tmp/jadx-src/sources 2>/dev/null | head -300 > inspection/external-intent-files.txt || true
           grep -RniE 'ACTION_VIEW|android\.intent\.action\.VIEW|Uri\.parse|startActivity\(' /tmp/jadx-src/sources 2>/dev/null | sed -E 's#https?://[^"[:space:]]+#<URL_REDACTED>#g' | head -300 > inspection/external-intent-lines-redacted.txt || true
           grep -RniE 'app_name|appname|telegram|t\.me|convite|invite' /tmp/decoded/res/values* 2>/dev/null | head -160 > inspection/resource-matches.txt || true
