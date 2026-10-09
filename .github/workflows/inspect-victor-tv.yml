@@ -1,0 +1,31 @@
+name: Inspect Victor TV
+on:
+  push:
+    branches:
+      - victor-tv-rebuild
+permissions:
+  contents: read
+  actions: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Inspect archive and compiled strings
+        shell: bash
+        run: |
+          set -eu
+          test -s "Victor TV.apk"
+          mkdir -p inspection
+          sha256sum "Victor TV.apk" > inspection/sha256.txt
+          unzip -l "Victor TV.apk" > inspection/apk-file-list.txt
+          strings -a -n 4 "Victor TV.apk" | grep -Ei 't\.me|telegram|invite|join|http[s]?://' > inspection/string-matches.txt || true
+          cat inspection/sha256.txt
+          cat inspection/string-matches.txt
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: victor-tv-inspection
+          path: inspection/
+          retention-days: 3
