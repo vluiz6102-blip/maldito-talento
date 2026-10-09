@@ -5,27 +5,56 @@ on:
       - victor-tv-rebuild
 permissions:
   contents: read
-  actions: write
 jobs:
   inspect:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Inspect archive and compiled strings
+      - uses: actions/checkout@v4
+      - name: Install APK analysis tools
         shell: bash
         run: |
-          set -eu
-          test -s "Victor TV.apk"
+          set -euo pipefail
+          curl -fsSL --retry 3 https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip -o /tmp/jadx.zip
+          mkdir -p /tmp/jadx
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+          chmod +x /tmp/jadx/bin/jadx
+          curl -fsSL --retry 3 https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar -o /tmp/apktool.jar
+          java -jar /tmp/apktool.jar --version
+          /tmp/jadx/bin/jadx --version
+      - name: Decode and search app resources
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p inspection
           sha256sum "Victor TV.apk" > inspection/sha256.txt
-          unzip -l "Victor TV.apk" > inspection/apk-file-list.txt
-          strings -a -n 4 "Victor TV.apk" | grep -Ei 't\.me|telegram|invite|join|http[s]?://' > inspection/string-matches.txt || true
-          cat inspection/sha256.txt
-          cat inspection/string-matches.txt
-      - name: Upload report
+          java -jar /tmp/apktool.jar d -f "Victor TV.apk" -o /tmp/decoded > /tmp/apktool.log 2>&1
+          /tmp/jadx/bin/jadx --no-res -d /tmp/jadx-src "Victor TV.apk" > /tmp/jadx.log 2>&1 || true
+          grep -RniE 't\.me|telegram|convite|invite' /tmp/jadx-src/sources /tmp/decoded/res 2>/dev/null | head -200 > inspection/telegram-matches.txt || true
+          grep -RliE 'ACTION_VIEW|android\.intent\.action\.VIEW|Uri\.parse|startActivity\(' /tmp/jadx-src/sources 2>/dev/null | head -300 > inspection/external-intent-files.txt || true
+          grep -RniE 'ACTION_VIEW|android\.intent\.action\.VIEW|Uri\.parse|startActivity\(' /tmp/jadx-src/sources 2>/dev/null | sed -E 's#https?://[^"[:space:]]+#<URL_REDACTED>#g' | head -300 > inspection/external-intent-lines-redacted.txt || true
+          grep -RniE 'app_name|appname|telegram|t\.me|convite|invite' /tmp/decoded/res/values* 2>/dev/null | head -160 > inspection/resource-matches.txt || true
+          grep -E 'android:name=|android:label=|android:exported=' /tmp/decoded/AndroidManifest.xml | head -100 > inspection/manifest-activities.txt || true
+          cp /tmp/decoded/AndroidManifest.xml inspection/AndroidManifest-decoded.xml
+          {
+            echo "APK SHA256:"
+            cat inspection/sha256.txt
+            echo
+            echo "Explicit Telegram-related source matches:"
+            cat inspection/telegram-matches.txt
+            echo
+            echo "Resource matches:"
+            cat inspection/resource-matches.txt
+            echo
+            echo "Activity/manifest highlights:"
+            cat inspection/manifest-activities.txt
+          } > inspection/report.txt
+          echo "Inspection completed."
+      - name: Upload inspection report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: victor-tv-inspection
+          name: victor-tv-decompiled-inspection
           path: inspection/
+          if-no-files-found: warn
           retention-days: 3
